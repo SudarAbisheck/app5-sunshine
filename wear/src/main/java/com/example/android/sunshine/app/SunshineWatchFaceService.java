@@ -26,13 +26,10 @@ import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.GregorianCalendar;
-import java.util.Locale;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
 
 public class SunshineWatchFaceService extends CanvasWatchFaceService {
-    private Typeface robotoRegular;
-    private Typeface robotoLight;
 
     private static final long INTERACTIVE_UPDATE_RATE_MS = TimeUnit.MINUTES.toMillis(1);
     private static final int MSG_UPDATE_TIME = 0;
@@ -78,7 +75,6 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
                 mTime.setToNow();
             }
         };
-        int mTapCount;
 
         float mXOffset;
         float mYOffset;
@@ -110,8 +106,8 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
             Resources resources = SunshineWatchFaceService.this.getResources();
             mYOffset = resources.getDimension(R.dimen.digital_y_offset);
 
-            robotoRegular = Typeface.createFromAsset(getAssets(),"Roboto-Regular.ttf");
-            robotoLight = Typeface.createFromAsset(getAssets(), "Roboto-Light.ttf");
+            Typeface robotoRegular = Typeface.createFromAsset(getAssets(), "Roboto-Regular.ttf");
+            Typeface robotoLight = Typeface.createFromAsset(getAssets(), "Roboto-Light.ttf");
 
             mBackgroundPaint = new Paint();
             mBackgroundPaint.setColor(resources.getColor(R.color.background));
@@ -243,26 +239,6 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
             updateTimer();
             updateDate();
         }
-
-//        @Override
-//        public void onTapCommand(int tapType, int x, int y, long eventTime) {
-//            Resources resources = SunshineWatchFaceService.this.getResources();
-//            switch (tapType) {
-//                case TAP_TYPE_TOUCH:
-//                    // The user has started touching the screen.
-//                    break;
-//                case TAP_TYPE_TOUCH_CANCEL:
-//                    // The user has started a different gesture or otherwise cancelled the tap.
-//                    break;
-//                case TAP_TYPE_TAP:
-//                    // The user has completed the tap gesture.
-//                    mTapCount++;
-//                    mBackgroundPaint.setColor(resources.getColor(mTapCount % 2 == 0 ?
-//                            R.color.background : R.color.background2));
-//                    break;
-//            }
-//            invalidate();
-//        }
 
         @Override
         public void onDraw(Canvas canvas, Rect bounds) {
