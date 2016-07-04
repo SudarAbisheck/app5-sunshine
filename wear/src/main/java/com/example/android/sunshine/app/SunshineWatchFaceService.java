@@ -89,6 +89,7 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
 
         float mMaxTXOffset, mMinTXOffset;
         float mTempYOffset;
+        float mAmbientCenterOffset;
 
         float bitmapXOffset, bitmapYOffset;
 
@@ -200,6 +201,7 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
             mMaxTXOffset = resources.getDimension(R.dimen.temp_max_x_offset);
             mMinTXOffset = resources.getDimension(R.dimen.temp_min_x_offset);
             mTempYOffset = resources.getDimension(R.dimen.temp_y_offset);
+            mAmbientCenterOffset = resources.getDimension(R.dimen.temp_center_offset_ambient);
 
             float tempSize = resources.getDimension(R.dimen.temp_text_size);
             mMaxTPaint.setTextSize(tempSize);
@@ -264,15 +266,29 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
 
         @Override
         public void onDraw(Canvas canvas, Rect bounds) {
+
+            int centerX = bounds.centerX();
+            String maxTemp = "25°";
+            String minTemp = "15°";
+
             if (isInAmbientMode()) {
                 canvas.drawColor(Color.BLACK);
                 mLinePaint.setColor(getColor(R.color.digital_text));
+                mDatePaint.setColor(getColor(R.color.digital_text));
+                mMinTPaint.setColor(getColor(R.color.digital_text));
+
+                canvas.drawText(maxTemp, centerX - (mMaxTPaint.measureText(maxTemp)+mAmbientCenterOffset), mTempYOffset, mMaxTPaint);
+                canvas.drawText(minTemp, centerX + mAmbientCenterOffset, mTempYOffset, mMinTPaint);
             } else {
                 canvas.drawRect(0, 0, bounds.width(), bounds.height(), mBackgroundPaint);
                 mLinePaint.setColor(getColor(R.color.date));
-            }
+                mDatePaint.setColor(getColor(R.color.date));
+                mMinTPaint.setColor(getColor(R.color.date));
 
-            int centerX = bounds.centerX();
+                canvas.drawBitmap(graphic, bitmapXOffset, bitmapYOffset, null);
+                canvas.drawText("25°", mMaxTXOffset, mTempYOffset, mMaxTPaint);
+                canvas.drawText("15°", mMinTXOffset, mTempYOffset, mMinTPaint);
+            }
 
             mTime.setToNow();
 //            String text = mAmbient
@@ -293,10 +309,6 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
 
             canvas.drawLine(centerX - 30 , mLineYOffset, centerX + 30 , mLineYOffset, mLinePaint);
 
-            canvas.drawBitmap(graphic, bitmapXOffset, bitmapYOffset, null);
-
-            canvas.drawText("25°", mMaxTXOffset, mTempYOffset, mMaxTPaint);
-            canvas.drawText("15°", mMinTXOffset, mTempYOffset, mMinTPaint);
         }
 
 
