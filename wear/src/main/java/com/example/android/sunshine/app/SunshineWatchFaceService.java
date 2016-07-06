@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -12,27 +13,50 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.Typeface;
+import android.net.Uri;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
+import android.preference.PreferenceManager;
+import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
 import android.support.wearable.watchface.CanvasWatchFaceService;
 import android.support.wearable.watchface.WatchFaceStyle;
 import android.text.format.Time;
+import android.util.Base64;
+import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.WindowInsets;
 
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.wearable.Asset;
+import com.google.android.gms.wearable.DataApi;
+import com.google.android.gms.wearable.DataEvent;
+import com.google.android.gms.wearable.DataEventBuffer;
+import com.google.android.gms.wearable.DataMap;
+import com.google.android.gms.wearable.DataMapItem;
+import com.google.android.gms.wearable.Wearable;
+
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import java.lang.ref.WeakReference;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.GregorianCalendar;
+import java.util.Locale;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
 
 public class SunshineWatchFaceService extends CanvasWatchFaceService {
 
+    private static final String TAG = SunshineWatchFaceService.class.getName();
+
     private static final long INTERACTIVE_UPDATE_RATE_MS = TimeUnit.MINUTES.toMillis(1);
     private static final int MSG_UPDATE_TIME = 0;
+
 
     @Override
     public Engine onCreateEngine() {
@@ -59,7 +83,9 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
         }
     }
 
-    private class Engine extends CanvasWatchFaceService.Engine {
+    private class Engine extends CanvasWatchFaceService.Engine
+            implements DataApi.DataListener,
+            GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener {
         final Handler mUpdateTimeHandler = new EngineHandler(this);
         boolean mRegisteredTimeZoneReceiver = false;
         Paint mBackgroundPaint;
@@ -79,6 +105,7 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
         float mXOffset;
         float mYOffset;
 
+        private static final String colon = ":";
         String date;
         float mDateYOffset;
         float mLineYOffset;
@@ -90,8 +117,24 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
         float bitmapXOffset, bitmapYOffset;
 
         Bitmap graphic;
+        String weatherDesc = "", minTemp = "", maxTemp = "";
 
         boolean mLowBitAmbient;
+        GoogleApiClient mGoogleApiClient = new GoogleApiClient.Builder(SunshineWatchFaceService.this)
+                .addConnectionCallbacks(this)
+                .addOnConnectionFailedListener(this)
+                .addApi(Wearable.API)
+                .build();
+        private static final String WEATHER_UPDATE_PATH = "/update";
+        private static final String IMAGE_KEY = "photo";
+        private static final String DESC_KEY = "desc";
+        private static final String MAX_TEMP_KEY = "max-temp";
+        private static final String MIN_TEMP_KEY = "min-temp";
+
+        private SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(getApplicationContext());
+        private static final String IMAGE_PREF_KEY = "image_string";
+        private static final String MIN_TEMP_PREF_KEY = "max_string";
+        private static final String MAX_TEMP_PREF_KEY = "min_string";
 
         @Override
         public void onCreate(SurfaceHolder holder) {
@@ -146,16 +189,23 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
             super.onVisibilityChanged(visible);
 
             if (visible) {
+                mGoogleApiClient.connect();
                 registerReceiver();
 
                 mTime.clear(TimeZone.getDefault().getID());
                 mTime.setToNow();
             } else {
                 unregisterReceiver();
+                
+                if (mGoogleApiClient != null && mGoogleApiClient.isConnected()) {
+                    Wearable.DataApi.removeListener(mGoogleApiClient, this);
+                    mGoogleApiClient.disconnect();
+                }
             }
 
             updateTimer();
             updateDate();
+            updateWeather();
         }
 
         private void registerReceiver() {
@@ -203,7 +253,7 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
             mMaxTPaint.setTextSize(tempSize);
             mMinTPaint.setTextSize(tempSize);
 
-            graphic = BitmapFactory.decodeResource(getResources(), R.drawable.ic_clear);
+//            graphic = BitmapFactory.decodeResource(getResources(), R.drawable.art_clear);
             bitmapXOffset = resources.getDimension(R.dimen.bitmap_x_offset);
             bitmapYOffset = resources.getDimension(R.dimen.bitmap_y_offset);
 
@@ -238,14 +288,13 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
 
             updateTimer();
             updateDate();
+            updateWeather();
         }
 
         @Override
         public void onDraw(Canvas canvas, Rect bounds) {
 
             int centerX = bounds.centerX();
-            String maxTemp = "25°";
-            String minTemp = "15°";
 
             if (isInAmbientMode()) {
                 canvas.drawColor(Color.BLACK);
@@ -253,26 +302,27 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
                 mDatePaint.setColor(getColor(R.color.digital_text));
                 mMinTPaint.setColor(getColor(R.color.digital_text));
 
-                canvas.drawText(maxTemp, centerX - (mMaxTPaint.measureText(maxTemp)+mAmbientCenterOffset), mTempYOffset, mMaxTPaint);
-                canvas.drawText(minTemp, centerX + mAmbientCenterOffset, mTempYOffset, mMinTPaint);
+                if(maxTemp != null)
+                    canvas.drawText(maxTemp, centerX - (mMaxTPaint.measureText(maxTemp)+mAmbientCenterOffset), mTempYOffset, mMaxTPaint);
+                if(minTemp != null)
+                    canvas.drawText(minTemp, centerX + mAmbientCenterOffset, mTempYOffset, mMinTPaint);
             } else {
                 canvas.drawRect(0, 0, bounds.width(), bounds.height(), mBackgroundPaint);
                 mLinePaint.setColor(getColor(R.color.date));
                 mDatePaint.setColor(getColor(R.color.date));
                 mMinTPaint.setColor(getColor(R.color.date));
 
-                canvas.drawBitmap(graphic, bitmapXOffset, bitmapYOffset, null);
-                canvas.drawText("25°", mMaxTXOffset, mTempYOffset, mMaxTPaint);
-                canvas.drawText("15°", mMinTXOffset, mTempYOffset, mMinTPaint);
+                if(graphic != null)
+                    canvas.drawBitmap(graphic, bitmapXOffset, bitmapYOffset, null);
+                if(maxTemp != null)
+                    canvas.drawText(maxTemp, mMaxTXOffset, mTempYOffset, mMaxTPaint);
+                if(minTemp != null)
+                    canvas.drawText(minTemp, mMinTXOffset, mTempYOffset, mMinTPaint);
             }
 
             mTime.setToNow();
-//            String text = mAmbient
-//                    ? String.format("%d:%02d", mTime.hour, mTime.minute)
-//                    : String.format("%d:%02d:%02d", mTime.hour, mTime.minute, mTime.second);
 
             String text = String.format("%d", mTime.hour, mTime.minute);
-            String colon = ":";
             float colonLength = mHourPaint.measureText(colon)/2;
 
             canvas.drawText(text, centerX - (mHourPaint.measureText(text)+colonLength), mYOffset, mHourPaint);
@@ -296,9 +346,16 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
         }
 
         private void updateDate(){
-                Calendar calendar = GregorianCalendar.getInstance();
-                DateFormat dateFormat = new SimpleDateFormat("EEE, MMM dd yyyy");
-                date = dateFormat.format(calendar.getTime()).toUpperCase();
+            Calendar calendar = GregorianCalendar.getInstance();
+            DateFormat dateFormat = new SimpleDateFormat("EEE, MMM dd yyyy", Locale.getDefault());
+            date = dateFormat.format(calendar.getTime()).toUpperCase();
+        }
+
+        private void updateWeather(){
+
+            maxTemp = prefs.getString(MAX_TEMP_PREF_KEY,null);
+            minTemp = prefs.getString(MIN_TEMP_PREF_KEY,null);
+            graphic = decodeBase64(prefs.getString(IMAGE_PREF_KEY, null));
         }
 
 
@@ -315,6 +372,105 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
                         - (timeMs % INTERACTIVE_UPDATE_RATE_MS);
                 mUpdateTimeHandler.sendEmptyMessageDelayed(MSG_UPDATE_TIME, delayMs);
             }
+        }
+
+
+
+        @Override
+        public void onDataChanged(DataEventBuffer dataEventBuffer) {
+            Log.d(TAG, "onDataChanged: " + dataEventBuffer);
+            for (DataEvent event : dataEventBuffer) {
+                if (event.getType() == DataEvent.TYPE_CHANGED) {
+                    Uri uri = event.getDataItem().getUri();
+                    String path = uri.getPath();
+                    if(WEATHER_UPDATE_PATH.equals(path)){
+                        DataMapItem dataMapItem = DataMapItem.fromDataItem(event.getDataItem());
+                        DataMap dataMap = dataMapItem.getDataMap();
+                        weatherDesc = dataMap.getString(DESC_KEY);
+                        minTemp = dataMap.getString(MIN_TEMP_KEY);
+                        maxTemp = dataMap.getString(MAX_TEMP_KEY);
+                        Asset imageAsset = dataMap.getAsset(IMAGE_KEY);
+                        // Loads image on background thread.
+                        new LoadBitmapAsyncTask().execute(imageAsset);
+
+                        SharedPreferences.Editor editor = prefs.edit();
+                        editor.putString(MAX_TEMP_PREF_KEY, maxTemp);
+                        editor.putString(MIN_TEMP_PREF_KEY, minTemp);
+                        editor.apply();
+                    }
+                }
+            }
+        }
+
+        @Override
+        public void onConnected(@Nullable Bundle bundle) {
+            Log.i(TAG, "onConnected: ");
+            Wearable.DataApi.addListener(mGoogleApiClient, this);
+        }
+
+        @Override
+        public void onConnectionSuspended(int i) {
+            Log.i(TAG, "onConnectionSuspended: ");
+        }
+
+        @Override
+        public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {
+            Log.i(TAG, "onConnectionFailed: ");
+        }
+
+        private class LoadBitmapAsyncTask extends AsyncTask<Asset, Void, Bitmap> {
+
+            @Override
+            protected Bitmap doInBackground(Asset... params) {
+
+                if (params.length > 0) {
+
+                    Asset asset = params[0];
+
+                    InputStream assetInputStream = Wearable.DataApi.getFdForAsset(
+                            mGoogleApiClient, asset).await().getInputStream();
+
+                    if (assetInputStream == null) {
+                        Log.w(TAG, "Requested an unknown Asset.");
+                        return null;
+                    }
+                    return BitmapFactory.decodeStream(assetInputStream);
+
+                } else {
+                    Log.e(TAG, "Asset must be non-null");
+                    return null;
+                }
+            }
+
+            @Override
+            protected void onPostExecute(Bitmap bitmap) {
+
+                if (bitmap != null) {
+                    Log.d(TAG, "Changing bitmap . . .");
+
+                    graphic = persistBitmap(bitmap);
+                    invalidate();
+                }
+            }
+        }
+
+        public Bitmap persistBitmap(Bitmap image)
+        {
+            ByteArrayOutputStream byteArrayOS = new ByteArrayOutputStream();
+            image.compress(Bitmap.CompressFormat.PNG, 100, byteArrayOS);
+            String encStr = Base64.encodeToString(byteArrayOS.toByteArray(), Base64.DEFAULT);
+
+            SharedPreferences.Editor editor = prefs.edit();
+            editor.putString(IMAGE_PREF_KEY, encStr);
+            editor.apply();
+            return image;
+        }
+
+        public Bitmap decodeBase64(String input)
+        {
+            if(input == null) return null;
+            byte[] decodedBytes = Base64.decode(input, 0);
+            return BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.length);
         }
     }
 }
