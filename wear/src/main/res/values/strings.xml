@@ -1,5 +1,5 @@
 <resources>
     <string name="app_name">Sunshine</string>
-    <string name="my_digital_name">My Digital</string>
+    <string name="watch_face_name">Sunshine</string>
     <string name="last_sync_string">LastSyncString</string>
 </resources>

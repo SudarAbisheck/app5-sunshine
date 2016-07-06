@@ -182,6 +182,15 @@
             android:name=".gcm.RegistrationIntentService"
             android:exported="false">
         </service>
+        <service
+            android:name=".sync.WearMessageListenerService"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+                <data android:scheme="wear" android:host="*" android:pathPrefix="/get-weather-data"/>
+            </intent-filter>
+        </service>
     </application>
 
 </manifest>

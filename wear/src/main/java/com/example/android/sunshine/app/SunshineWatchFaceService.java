@@ -37,6 +37,8 @@ import com.google.android.gms.wearable.DataEvent;
 import com.google.android.gms.wearable.DataEventBuffer;
 import com.google.android.gms.wearable.DataMap;
 import com.google.android.gms.wearable.DataMapItem;
+import com.google.android.gms.wearable.Node;
+import com.google.android.gms.wearable.NodeApi;
 import com.google.android.gms.wearable.Wearable;
 
 import java.io.ByteArrayOutputStream;
@@ -46,6 +48,7 @@ import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.GregorianCalendar;
+import java.util.List;
 import java.util.Locale;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
@@ -125,6 +128,9 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
                 .addOnConnectionFailedListener(this)
                 .addApi(Wearable.API)
                 .build();
+        private String nodeId;
+
+        private static final String GET_WEATHER_DATA_PATH = "/get-weather-data";
         private static final String WEATHER_UPDATE_PATH = "/update";
         private static final String IMAGE_KEY = "photo";
         private static final String DESC_KEY = "desc";
@@ -352,12 +358,33 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
         }
 
         private void updateWeather(){
-
             maxTemp = prefs.getString(MAX_TEMP_PREF_KEY,null);
             minTemp = prefs.getString(MIN_TEMP_PREF_KEY,null);
             graphic = decodeBase64(prefs.getString(IMAGE_PREF_KEY, null));
+            if(maxTemp == null || minTemp == null || graphic == null){
+                Wearable.MessageApi.sendMessage(mGoogleApiClient, nodeId, GET_WEATHER_DATA_PATH, null);
+            }
         }
 
+        private void retrieveDeviceNode() {
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    if ( !mGoogleApiClient.isConnected() )
+                        return;
+
+                    NodeApi.GetConnectedNodesResult result =
+                            Wearable.NodeApi.getConnectedNodes(mGoogleApiClient).await();
+
+                    List<Node> nodes = result.getNodes();
+
+                    if (nodes.size() > 0)
+                        nodeId = nodes.get(0).getId();
+
+                    Log.d(TAG, "Node ID of phone: " + nodeId);
+                }
+            }).start();
+        }
 
         private boolean shouldTimerBeRunning() {
             return isVisible() && !isInAmbientMode();
@@ -406,6 +433,7 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
         public void onConnected(@Nullable Bundle bundle) {
             Log.i(TAG, "onConnected: ");
             Wearable.DataApi.addListener(mGoogleApiClient, this);
+            retrieveDeviceNode();
         }
 
         @Override
