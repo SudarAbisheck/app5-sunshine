@@ -26,6 +26,7 @@ import android.support.wearable.watchface.WatchFaceStyle;
 import android.text.format.Time;
 import android.util.Base64;
 import android.util.Log;
+import android.view.Gravity;
 import android.view.SurfaceHolder;
 import android.view.WindowInsets;
 
@@ -150,10 +151,9 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
                     .setCardPeekMode(WatchFaceStyle.PEEK_MODE_VARIABLE)
                     .setBackgroundVisibility(WatchFaceStyle.BACKGROUND_VISIBILITY_INTERRUPTIVE)
                     .setShowSystemUiTime(false)
-                    .setAcceptsTapEvents(true)
+                    .setHotwordIndicatorGravity(Gravity.END | Gravity.TOP)
                     .build());
             Resources resources = SunshineWatchFaceService.this.getResources();
-            mYOffset = resources.getDimension(R.dimen.digital_y_offset);
 
             Typeface robotoRegular = Typeface.createFromAsset(getAssets(), "Roboto-Regular.ttf");
             Typeface robotoLight = Typeface.createFromAsset(getAssets(), "Roboto-Light.ttf");
@@ -242,17 +242,22 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
             float textSize = resources.getDimension(isRound
                     ? R.dimen.digital_text_size_round : R.dimen.digital_text_size);
 
+//            mYOffset = resources.getDimension(R.dimen.digital_y_offset);
+
             mHourPaint.setTextSize(textSize);
             mMinPaint.setTextSize(textSize);
 
-            mDatePaint.setTextSize(resources.getDimension(R.dimen.date_text_size));
-            mDateYOffset = resources.getDimension(R.dimen.date_y_offset);
+            textSize = resources.getDimension(isRound
+                    ? R.dimen.date_text_size_round : R.dimen.date_text_size);
+            mDatePaint.setTextSize(textSize);
 
-            mLineYOffset = resources.getDimension(R.dimen.seper_line_y_offset);
-
+//            mDateYOffset = resources.getDimension(R.dimen.date_y_offset);
+//
+//            mLineYOffset = resources.getDimension(R.dimen.seper_line_y_offset);
+//
             mMaxTXOffset = resources.getDimension(R.dimen.temp_max_x_offset);
             mMinTXOffset = resources.getDimension(R.dimen.temp_min_x_offset);
-            mTempYOffset = resources.getDimension(R.dimen.temp_y_offset);
+//            mTempYOffset = resources.getDimension(R.dimen.temp_y_offset);
             mAmbientCenterOffset = resources.getDimension(R.dimen.temp_center_offset_ambient);
 
             float tempSize = resources.getDimension(R.dimen.temp_text_size);
@@ -261,7 +266,7 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
 
 //            graphic = BitmapFactory.decodeResource(getResources(), R.drawable.art_clear);
             bitmapXOffset = resources.getDimension(R.dimen.bitmap_x_offset);
-            bitmapYOffset = resources.getDimension(R.dimen.bitmap_y_offset);
+//            bitmapYOffset = resources.getDimension(R.dimen.bitmap_y_offset);
 
         }
 
@@ -301,6 +306,14 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
         public void onDraw(Canvas canvas, Rect bounds) {
 
             int centerX = bounds.centerX();
+            int height = canvas.getHeight();
+
+            mYOffset = (float)(height*0.4);
+            mDateYOffset = (float)(height*0.54);
+            mLineYOffset = (float)(height*0.6);
+            mTempYOffset = (float)(height*0.8);
+            bitmapYOffset = (float)(height*0.6);
+
 
             if (isInAmbientMode()) {
                 canvas.drawColor(Color.BLACK);
